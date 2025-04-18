@@ -1,11 +1,11 @@
-%%writefile KMeansClustering.java
 import java.io.*;
 import java.util.*;
 
-public class KMeansClustering {
+public class KMeansParallel {
 
-    private static final int K = 3;  
-    private static final int MAX_ITERATIONS = 100;  
+    private static final int K = 3; 
+    private static final int MAX_ITERATIONS = 100; 
+    private static final int NUM_THREADS = 4; 
 
     static List<Point> points = new ArrayList<>();
 
@@ -33,6 +33,7 @@ public class KMeansClustering {
         }
 
         void update(List<Point> points) {
+            if (points.isEmpty()) return;
             double sumX = 0, sumY = 0;
             for (Point p : points) {
                 sumX += p.x;
@@ -43,33 +44,66 @@ public class KMeansClustering {
         }
     }
 
+    static class ClusterAssignmentThread extends Thread {
+        private List<Point> pointsSubset;
+        private List<Centroid> centroids;
+
+        ClusterAssignmentThread(List<Point> pointsSubset, List<Centroid> centroids) {
+            this.pointsSubset = pointsSubset;
+            this.centroids = centroids;
+        }
+
+        public void run() {
+            for (Point p : pointsSubset) {
+                double minDist = Double.MAX_VALUE;
+                int closestCluster = -1;
+
+                for (int j = 0; j < K; j++) {
+                    double dist = p.distanceTo(new Point(centroids.get(j).x, centroids.get(j).y));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestCluster = j;
+                    }
+                }
+                p.cluster = closestCluster;
+            }
+        }
+    }
+
     public static void readData(String filePath) throws IOException {
         BufferedReader br = new BufferedReader(new FileReader(filePath));
         String line;
         while ((line = br.readLine()) != null) {
             String[] data = line.split(",");
             if (data.length == 2) {
-                double x = Double.parseDouble(data[0]);
-                double y = Double.parseDouble(data[1]);
+                double x = Double.parseDouble(data[0].trim());
+                double y = Double.parseDouble(data[1].trim());
                 points.add(new Point(x, y));
             }
         }
         br.close();
     }
 
-    public static void assignPointsToClusters(List<Centroid> centroids) {
-        for (Point p : points) {
-            double minDist = Double.MAX_VALUE;
-            int closestCluster = -1;
+    public static void assignPointsToClustersParallel(List<Centroid> centroids) {
+        int chunkSize = points.size() / NUM_THREADS;
+        List<Thread> threads = new ArrayList<>();
 
-            for (int j = 0; j < K; j++) {
-                double dist = p.distanceTo(new Point(centroids.get(j).x, centroids.get(j).y));
-                if (dist < minDist) {
-                    minDist = dist;
-                    closestCluster = j;
-                }
+        for (int i = 0; i < NUM_THREADS; i++) {
+            int start = i * chunkSize;
+            int end = (i == NUM_THREADS - 1) ? points.size() : start + chunkSize;
+            List<Point> subList = points.subList(start, end);
+
+            Thread t = new ClusterAssignmentThread(subList, centroids);
+            threads.add(t);
+            t.start();
+        }
+
+        for (Thread t : threads) {
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
-            p.cluster = closestCluster;
         }
     }
 
@@ -82,7 +116,7 @@ public class KMeansClustering {
         }
 
         for (int iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-            assignPointsToClusters(centroids);
+            assignPointsToClustersParallel(centroids);
 
             for (int i = 0; i < K; i++) {
                 List<Point> clusterPoints = new ArrayList<>();
@@ -95,22 +129,24 @@ public class KMeansClustering {
             }
 
             System.out.println("Iteration " + (iteration + 1) + " completed.");
+        }
 
-            System.out.println("Centroids after iteration " + (iteration + 1) + ":");
-            for (int i = 0; i < K; i++) {
-                System.out.println("Centroid " + (i+1) + ": (" + centroids.get(i).x + ", " + centroids.get(i).y + ")");
-            }
+        System.out.println("\nFinal Results:");
+        for (Point p : points) {
+            System.out.println("Point (" + p.x + ", " + p.y + ") -> Cluster " + (p.cluster + 1));
+        }
 
-            System.out.println("Points assigned to clusters after iteration " + (iteration + 1) + ":");
-            for (Point p : points) {
-                System.out.println("Point (" + p.x + ", " + p.y + ") is assigned to cluster " + (p.cluster + 1));
-            }
+        System.out.println("\nFinal Centroids:");
+        for (int i = 0; i < K; i++) {
+            Centroid c = centroids.get(i);
+            System.out.println("Centroid " + (i + 1) + " -> (" + c.x + ", " + c.y + ")");
         }
     }
 
     public static void main(String[] args) throws IOException {
         String filePath = "/content/data.csv"; 
-        readData(filePath); 
-        kMeans();  
+        readData(filePath);
+        kMeans();
     }
 }
+
