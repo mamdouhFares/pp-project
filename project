@@ -1,0 +1,116 @@
+%%writefile KMeansClustering.java
+import java.io.*;
+import java.util.*;
+
+public class KMeansClustering {
+
+    private static final int K = 3;  
+    private static final int MAX_ITERATIONS = 100;  
+
+    static List<Point> points = new ArrayList<>();
+
+    static class Point {
+        double x, y;
+        int cluster;
+
+        Point(double x, double y) {
+            this.x = x;
+            this.y = y;
+            this.cluster = -1;
+        }
+
+        double distanceTo(Point other) {
+            return Math.sqrt(Math.pow(this.x - other.x, 2) + Math.pow(this.y - other.y, 2));
+        }
+    }
+
+    static class Centroid {
+        double x, y;
+
+        Centroid(double x, double y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        void update(List<Point> points) {
+            double sumX = 0, sumY = 0;
+            for (Point p : points) {
+                sumX += p.x;
+                sumY += p.y;
+            }
+            this.x = sumX / points.size();
+            this.y = sumY / points.size();
+        }
+    }
+
+    public static void readData(String filePath) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(filePath));
+        String line;
+        while ((line = br.readLine()) != null) {
+            String[] data = line.split(",");
+            if (data.length == 2) {
+                double x = Double.parseDouble(data[0]);
+                double y = Double.parseDouble(data[1]);
+                points.add(new Point(x, y));
+            }
+        }
+        br.close();
+    }
+
+    public static void assignPointsToClusters(List<Centroid> centroids) {
+        for (Point p : points) {
+            double minDist = Double.MAX_VALUE;
+            int closestCluster = -1;
+
+            for (int j = 0; j < K; j++) {
+                double dist = p.distanceTo(new Point(centroids.get(j).x, centroids.get(j).y));
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestCluster = j;
+                }
+            }
+            p.cluster = closestCluster;
+        }
+    }
+
+    public static void kMeans() {
+        List<Centroid> centroids = new ArrayList<>();
+        Random rand = new Random();
+        for (int i = 0; i < K; i++) {
+            int randomIndex = rand.nextInt(points.size());
+            centroids.add(new Centroid(points.get(randomIndex).x, points.get(randomIndex).y));
+        }
+
+        for (int iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+            assignPointsToClusters(centroids);
+
+            for (int i = 0; i < K; i++) {
+                List<Point> clusterPoints = new ArrayList<>();
+                for (Point p : points) {
+                    if (p.cluster == i) {
+                        clusterPoints.add(p);
+                    }
+                }
+                centroids.get(i).update(clusterPoints);
+            }
+
+            System.out.println("Iteration " + (iteration + 1) + " completed.");
+
+            System.out.println("Centroids after iteration " + (iteration + 1) + ":");
+            for (int i = 0; i < K; i++) {
+                System.out.println("Centroid " + (i+1) + ": (" + centroids.get(i).x + ", " + centroids.get(i).y + ")");
+            }
+
+            System.out.println("Points assigned to clusters after iteration " + (iteration + 1) + ":");
+            for (Point p : points) {
+                System.out.println("Point (" + p.x + ", " + p.y + ") is assigned to cluster " + (p.cluster + 1));
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        String filePath = "/content/data.csv"; 
+        readData(filePath); 
+        kMeans();  
+    }
+}
